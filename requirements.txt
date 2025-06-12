@@ -1,7 +1,4 @@
 pandas
-streamlit
 scikit-learn
-plotly
-gspread
-oauth2client
-
+streamlit
+matplotlib
