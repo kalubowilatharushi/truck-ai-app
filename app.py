@@ -1,18 +1,16 @@
-I'll provide an even simpler version that doesn't require NLTK. Here's a streamlined version that will work with minimal dependencies:
+Here's the correct code without any comments at the beginning. Save this exactly as shown below as `app.py`:
 
 ```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-# Page configuration
 st.set_page_config(
     page_title="Truck Health Prediction",
     page_icon="🚚",
     layout="wide"
 )
 
-# Custom CSS
 st.markdown("""
     <style>
     .main {
@@ -30,15 +28,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# Sidebar
 with st.sidebar:
     st.title("🚚 Navigation")
     page = st.radio("", ["Dashboard", "Predictions", "Analysis"])
 
-# Main content
 st.title("Truck Health Prediction System")
 
-# Top metrics row
 col1, col2, col3, col4 = st.columns(4)
 with col1:
     st.metric("Total Trucks", "150", "+5")
@@ -50,7 +45,6 @@ with col4:
     st.metric("Low Risk", "110", "+4")
 
 if page == "Dashboard":
-    # Risk Distribution Chart
     risk_data = pd.DataFrame({
         'Risk Level': ['Low', 'Medium', 'High'],
         'Count': [110, 28, 12]
@@ -81,7 +75,6 @@ elif page == "Predictions":
         vibration = st.number_input("Vibration Level", 0.0, 10.0)
 
     if st.button("Predict"):
-        # Simple prediction logic
         if temperature > 90 or vibration > 7:
             st.error("🔴 High Risk: Immediate attention required")
         elif temperature > 70 or vibration > 5:
@@ -96,11 +89,9 @@ elif page == "Analysis":
     
     if st.button("Analyze"):
         if notes:
-            # Simple analysis
             words = notes.lower().split()
             word_count = len(words)
             
-            # Basic keyword checking
             maintenance_terms = ['repair', 'replace', 'broken', 'issue', 'problem']
             found_terms = [word for word in words if word in maintenance_terms]
             
@@ -110,7 +101,6 @@ elif page == "Analysis":
             else:
                 st.success("No immediate issues detected")
 
-# File upload section
 st.markdown("---")
 st.markdown("### Data Upload")
 uploaded_file = st.file_uploader("Upload maintenance records", type=['csv', 'xlsx'])
@@ -126,25 +116,15 @@ if uploaded_file:
         st.error(f"Error reading file: {e}")
 ```
 
-To use this version:
-
-1. Install only the essential packages:
+Make sure to:
+1. Install required packages:
 ```bash
 pip install streamlit pandas plotly
 ```
 
-2. Save this code as `app.py`
-
-3. Run the app:
+2. Run the app:
 ```bash
 streamlit run app.py
 ```
 
-This version:
-- Removes NLTK dependency
-- Keeps core functionality
-- Maintains professional appearance
-- Uses simpler text analysis
-- Works with minimal setup
-
-Would you like me to explain any part or make additional simplifications?
+This should now work without any syntax errors. Would you like me to explain any part of the code?
