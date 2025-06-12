@@ -1,90 +1,67 @@
 import streamlit as st
-
-# ✅ Set page config FIRST
-st.set_page_config(page_title="Truck Health AI", layout="wide")
-
 import pandas as pd
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.feature_extraction.text import TfidfVectorizer
 
-# --- Custom CSS for modern UI ---
-st.markdown("""
-    <style>
-        .main {
-            background-color: #f7f9fc;
-        }
-        .card {
-            background-color: white;
-            padding: 1.5em;
-            border-radius: 15px;
-            box-shadow: 2px 2px 12px rgba(0,0,0,0.1);
-            margin-bottom: 1em;
-        }
-        .header {
-            font-size: 2em;
-            font-weight: bold;
-            margin-bottom: 0.5em;
-        }
-        .subtext {
-            font-size: 1em;
-            color: gray;
-        }
-    </style>
-""", unsafe_allow_html=True)
+# Page configuration
+st.set_page_config(page_title="Truck Health Dashboard", layout="wide")
+st.markdown("<h1 style='text-align: center;'>🚚 Truck Health Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>AI-powered failure risk prediction using 1,000 inbuilt records</p>", unsafe_allow_html=True)
 
-# --- App Header ---
-st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/f/fd/Isuzu_logo.svg/2560px-Isuzu_logo.svg.png", width=180)
-st.markdown('<div class="card"><div class="header">🚚 AI-Based Truck Health Prediction App</div><div class="subtext">Monitor Isuzu 4JJ1 engine condition with AI + NLP</div></div>', unsafe_allow_html=True)
+# Load inbuilt dataset
+@st.cache_data
+def load_data():
+    return pd.read_csv("inbuilt_truck_data.csv")
 
-# --- Tabs for features ---
-tab1, tab2, tab3 = st.tabs(["🛠️ Predict Engine Health", "💬 Analyze Mechanic Notes", "📊 View Engine Data"])
+data = load_data()
 
-# --- Tab 1: Predict Engine Health ---
-with tab1:
-    st.subheader("Engine Failure Risk")
-    
-    # 🔁 Replace with real model prediction here
-    risk_level = "Medium"  # Example: Use ML model here
+# Train model
+X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
+y = data['Failure']
+model = RandomForestClassifier()
+model.fit(X, y)
 
-    if risk_level == "Low":
-        st.success("🟢 Risk Level: Low - Truck is healthy.")
-    elif risk_level == "Medium":
-        st.warning("🟡 Risk Level: Medium - Maintenance recommended.")
-    else:
-        st.error("🔴 Risk Level: High - Immediate attention needed!")
+labels = {0: 'Low', 1: 'Medium', 2: 'High'}
+emoji_map = {'Low': '🟢 Low', 'Medium': '🟡 Medium', 'High': '🔴 High'}
 
-    # Example metric
-    st.metric("Failure Probability", value="42%", delta="-5% since last week")
+# Predict
+predictions = model.predict(X)
+data['Failure Risk'] = [emoji_map[labels[p]] for p in predictions]
 
-# --- Tab 2: NLP - Analyze Mechanic Notes ---
-with tab2:
-    st.subheader("Top Keywords from Mechanic Comments")
+# Display results
+st.success("✅ Prediction completed on 1,000 inbuilt records.")
+st.subheader("📊 Prediction Results")
+st.dataframe(data)
 
-    # 🔁 Replace with actual NLP output
-    keywords = ["oil leak", "sensor error", "engine heat", "delay start"]
+# Risk counts
+label_series = pd.Series([labels[p] for p in predictions])
+emoji_counts = label_series.map(emoji_map).value_counts()
 
-    st.markdown("**🔑 Frequent Issues Found:**")
-    for kw in keywords:
-        st.markdown(f"- {kw}")
+col1, col2, col3 = st.columns(3)
+col1.metric("🟢 Low Risk", emoji_counts.get('🟢 Low', 0))
+col2.metric("🟡 Medium Risk", emoji_counts.get('🟡 Medium', 0))
+col3.metric("🔴 High Risk", emoji_counts.get('🔴 High', 0))
 
-    # Optional: Analyze new comment input
-    comment = st.text_area("Paste mechanic comment to analyze:")
-    if st.button("Analyze"):
-        # 🔁 Replace with real NLP model
-        st.info("🔍 AI Analysis: Possible issue with engine temperature sensor.")
-
-# --- Tab 3: View Google Sheets Data ---
-with tab3:
-    st.subheader("Truck Performance Data (from Google Sheets)")
-
-    # Load from Google Sheets
-    sheet_url = "https://docs.google.com/spreadsheets/d/1ccOkw9pObr27u862s7sg-5qnTj_82KQpL3eayBgtgEg/export?format=csv"
-
-    try:
-        df = pd.read_csv(sheet_url)
-        st.dataframe(df)
-    except Exception as e:
-        st.error("❌ Could not load data from Google Sheets.")
-        st.exception(e)
-
-# --- Footer ---
+# -------------------------------
+# 🛠️ Mechanic Notes Analyzer (NLP)
+# -------------------------------
 st.markdown("---")
-st.markdown("Made with ❤️ by **Tharushi Kalubowila**  \n[GitHub Repo](https://github.com/kalubowilatharushi/truck-ai-app) | [Live App](https://truck-ai-app-kjd7oi2patsuru9uttftsl.streamlit.app)")
+st.subheader("🛠️ Mechanic Notes Analyzer")
+
+text_input = st.text_area("Paste mechanic notes or comments here:")
+
+if st.button("Analyze Comments"):
+    if text_input.strip() == "":
+        st.warning("⚠️ Please enter some text to analyze.")
+    else:
+        logs = [text_input]
+        vectorizer = TfidfVectorizer(stop_words='english')
+        X_text = vectorizer.fit_transform(logs)
+        feature_names = vectorizer.get_feature_names_out()
+        scores = X_text.toarray().flatten()
+        keywords = list(zip(feature_names, scores))
+        sorted_keywords = sorted(keywords, key=lambda x: x[1], reverse=True)[:5]
+
+        st.write("🔍 **Top Keywords Detected:**")
+        for word, score in sorted_keywords:
+            st.markdown(f"- `{word}` (score: {score:.2f})")
