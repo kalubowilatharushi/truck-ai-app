@@ -1,4 +1,7 @@
 pandas
-scikit-learn
 streamlit
+scikit-learn
+plotly
+gspread
+oauth2client
 
