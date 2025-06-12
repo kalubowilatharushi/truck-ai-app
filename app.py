@@ -1,17 +1,9 @@
+I'll provide an even simpler version that doesn't require NLTK. Here's a streamlined version that will work with minimal dependencies:
+
+```python
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from collections import Counter
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
-
-# Download NLTK data (run once)
-try:
-    nltk.download('punkt')
-    nltk.download('stopwords')
-except:
-    pass
 
 # Page configuration
 st.set_page_config(
@@ -30,12 +22,6 @@ st.markdown("""
         background-color: #f5f5f5;
     }
     .metric-card {
-        background-color: white;
-        padding: 15px;
-        border-radius: 10px;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .css-1r6slb0 {  /* Metric container */
         background-color: white;
         padding: 15px;
         border-radius: 10px;
@@ -95,7 +81,7 @@ elif page == "Predictions":
         vibration = st.number_input("Vibration Level", 0.0, 10.0)
 
     if st.button("Predict"):
-        # Simple demo prediction logic
+        # Simple prediction logic
         if temperature > 90 or vibration > 7:
             st.error("🔴 High Risk: Immediate attention required")
         elif temperature > 70 or vibration > 5:
@@ -110,25 +96,21 @@ elif page == "Analysis":
     
     if st.button("Analyze"):
         if notes:
-            # Basic NLP analysis
-            tokens = word_tokenize(notes.lower())
-            stop_words = set(stopwords.words('english'))
-            tokens = [word for word in tokens if word.isalnum() and word not in stop_words]
-            word_freq = Counter(tokens)
+            # Simple analysis
+            words = notes.lower().split()
+            word_count = len(words)
             
-            # Display results
-            st.markdown("#### Top Keywords Found:")
-            for word, count in word_freq.most_common(5):
-                st.markdown(f"- {word}: {count} times")
-            
-            # Simple sentiment analysis
+            # Basic keyword checking
             maintenance_terms = ['repair', 'replace', 'broken', 'issue', 'problem']
-            if any(term in notes.lower() for term in maintenance_terms):
-                st.warning("⚠️ Maintenance may be required")
+            found_terms = [word for word in words if word in maintenance_terms]
+            
+            st.markdown(f"Word count: {word_count}")
+            if found_terms:
+                st.warning(f"Found maintenance keywords: {', '.join(found_terms)}")
             else:
-                st.success("✅ No immediate issues detected")
+                st.success("No immediate issues detected")
 
-# File upload section at the bottom
+# File upload section
 st.markdown("---")
 st.markdown("### Data Upload")
 uploaded_file = st.file_uploader("Upload maintenance records", type=['csv', 'xlsx'])
@@ -142,3 +124,27 @@ if uploaded_file:
         st.dataframe(df.head())
     except Exception as e:
         st.error(f"Error reading file: {e}")
+```
+
+To use this version:
+
+1. Install only the essential packages:
+```bash
+pip install streamlit pandas plotly
+```
+
+2. Save this code as `app.py`
+
+3. Run the app:
+```bash
+streamlit run app.py
+```
+
+This version:
+- Removes NLTK dependency
+- Keeps core functionality
+- Maintains professional appearance
+- Uses simpler text analysis
+- Works with minimal setup
+
+Would you like me to explain any part or make additional simplifications?
