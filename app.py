@@ -1,4 +1,4 @@
-Here's the correct code without any comments at the beginning. Save this exactly as shown below as `app.py`:
+I understand the issue now. You're copying the entire message including my explanatory text. Let me provide just the pure Python code that you should copy into your `app.py` file:
 
 ```python
 import streamlit as st
@@ -116,15 +116,6 @@ if uploaded_file:
         st.error(f"Error reading file: {e}")
 ```
 
-Make sure to:
-1. Install required packages:
-```bash
-pip install streamlit pandas plotly
-```
+Copy ONLY the code above (starting from `import streamlit as st` and ending with the last line) into your `app.py` file. Make sure you don't include any of my explanatory text or the code fence markers (```).
 
-2. Run the app:
-```bash
-streamlit run app.py
-```
-
-This should now work without any syntax errors. Would you like me to explain any part of the code?
+Let me know if you still encounter any issues!
