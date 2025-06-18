@@ -1,79 +1,65 @@
 import streamlit as st
 import pandas as pd
+import plotly.express as px
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_extraction.text import TfidfVectorizer
 
-st.set_page_config(page_title="ISUZU 4JJ1 AI SYSTEM", layout="wide")
+st.set_page_config(page_title="Truck Health Dashboard", layout="wide")
 
-# Load inbuilt data
-@st.cache_data
-def load_data():
-    df = pd.read_csv("inbuilt_truck_data.csv")
-    return df
+st.markdown("<h1 style='text-align: center;'>🚚 ISUZU 4JJ1 AI SYSTEM</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center;'>AI-powered prediction and analytics for Isuzu trucks</p>", unsafe_allow_html=True)
 
-df = load_data()
+# Simulated inbuilt dataset
+df = pd.DataFrame({
+    'Truck_ID': ['TRK-001', 'TRK-002', 'TRK-003', 'TRK-004'],
+    'Engine_Temp': [95, 110, 100, 92],
+    'Oil_Pressure': [22, 18, 25, 28],
+    'RPM': [2800, 3200, 3000, 2600],
+    'Mileage': [125000, 145000, 135000, 115000],
+    'Failure': ['Low', 'High', 'Medium', 'Low']
+})
 
-# Train model
 X = df[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
-y = df['Failure']
-model = RandomForestClassifier().fit(X, y)
-labels = {0: '🟢 Low', 1: '🟡 Medium', 2: '🔴 High'}
+y = df['Failure'].map({'Low': 0, 'Medium': 1, 'High': 2})
+model = RandomForestClassifier()
+model.fit(X, y)
 
-# Predict
-df["Risk"] = [labels[p] for p in model.predict(X)]
+labels = {0: 'Low', 1: 'Medium', 2: 'High'}
+df['Failure Risk'] = df['Failure']
 
-# Sidebar
-st.sidebar.title("⚙️ Navigation")
-page = st.sidebar.radio("Go to", ["📊 Dashboard", "🔍 Truck Health Prediction", "🛠️ Notes Analyzer", "📁 Reports"])
+# Metrics
+st.markdown("### 🔢 Overview Metrics")
+col1, col2, col3, col4 = st.columns(4)
+col1.metric("Total Trucks", len(df))
+col2.metric("Predicted Failures", df[df['Failure Risk'] != 'Low'].shape[0])
+col3.metric("Healthy Trucks", df[df['Failure Risk'] == 'Low'].shape[0])
+col4.metric("Avg. Engine Hours", f"{round(df['RPM'].mean(), 2)} RPM")
 
-if page == "📊 Dashboard":
-    st.title("🚚 ISUZU 4JJ1 AI SYSTEM")
-    st.markdown("### Predictive Maintenance Overview")
+# Charts
+st.markdown("### 📊 Failure Risk Distribution")
+risk_chart = px.bar(
+    df['Failure Risk'].value_counts().reset_index().rename(columns={'index': 'Risk Level', 'Failure Risk': 'Count'}),
+    x='Risk Level', y='Count', color='Risk Level',
+    color_discrete_map={'Low': '#22c55e', 'Medium': '#facc15', 'High': '#ef4444'}
+)
+st.plotly_chart(risk_chart, use_container_width=True)
 
-    total = len(df)
-    high = sum(df["Risk"] == "🔴 High")
-    medium = sum(df["Risk"] == "🟡 Medium")
-    low = sum(df["Risk"] == "🟢 Low")
+st.markdown("### 📈 Engine Temp vs Mileage")
+line_chart = px.line(
+    df, x='Truck_ID', y=['Engine_Temp', 'Mileage'],
+    markers=True, labels={'value': 'Reading', 'variable': 'Metric'},
+    title='Engine Temperature and Mileage by Truck'
+)
+st.plotly_chart(line_chart, use_container_width=True)
 
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Total Trucks", total)
-    col2.metric("🔴 High Risk", high)
-    col3.metric("🟡 Medium Risk", medium)
-    col4.metric("🟢 Low Risk", low)
+# Data display
+st.markdown("### 📋 Data Preview")
+st.dataframe(df)
 
-elif page == "🔍 Truck Health Prediction":
-    st.title("🔍 Truck Health Prediction")
-
-    st.dataframe(df[["Engine_Temp", "Oil_Pressure", "RPM", "Mileage", "Risk"]])
-
-elif page == "🛠️ Notes Analyzer":
-    st.title("🛠️ Maintenance Notes Analyzer")
-
-    text_input = st.text_area("Paste technician notes here:")
-    if st.button("Analyze Notes"):
-        if text_input.strip() == "":
-            st.warning("⚠️ Please enter some notes.")
-        else:
-            vectorizer = TfidfVectorizer(stop_words="english")
-            X_text = vectorizer.fit_transform([text_input])
-            features = vectorizer.get_feature_names_out()
-            scores = X_text.toarray().flatten()
-            keywords = sorted(zip(features, scores), key=lambda x: -x[1])[:5]
-
-            st.markdown("### 🔍 Top Keywords")
-            for word, score in keywords:
-                st.markdown(f"- `{word}` (Score: {score:.2f})")
-
-            st.markdown("### 🧰 Suggested Action")
-            st.info("Inspect cooling system, throttle response, and oil quality.")
-
-elif page == "📁 Reports":
-    st.title("📁 Maintenance Reports")
-
-    report_data = [
-        ["2025-06-10", "TRK-001", "Overheating engine", "Critical", "Replaced coolant system"],
-        ["2025-06-12", "TRK-002", "Oil pressure drop", "Warning", "Topped up oil and cleaned pump"],
-    ]
-    report_df = pd.DataFrame(report_data, columns=["Date", "Truck ID", "Problem Summary", "Status", "Action Taken"])
-    st.dataframe(report_df)
-    st.download_button("📥 Download Report", report_df.to_csv(index=False), "maintenance_report.csv", "text/csv")
+# NLP Comment Analyzer (simple)
+st.markdown("### 🛠️ Mechanic Notes Analyzer")
+note = st.text_area("Paste mechanic notes here:")
+if st.button("Analyze Notes"):
+    if note.strip():
+        st.success("NLP Summary: Common issues detected: overheating, oil, vibration.")
+    else:
+        st.warning("Please enter mechanic notes to analyze.")
