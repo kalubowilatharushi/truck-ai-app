@@ -2,20 +2,25 @@ import streamlit as st
 import pandas as pd
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
-from fpdf import FPDF
-import base64
-import io
 
-st.set_page_config(page_title="Truck AI Dashboard", layout="wide")
+# -------------------
+# Page configuration
+# -------------------
+st.set_page_config(page_title="Isuzu 4JJ1 AI Maintenance System", layout="wide")
+st.markdown("<h1 style='text-align: center; color: #4CAF50;'>🚚 Isuzu 4JJ1 - AI Maintenance Dashboard</h1>", unsafe_allow_html=True)
 
-# Load dataset
+# -------------------
+# Load inbuilt dataset
+# -------------------
 @st.cache_data
 def load_data():
     return pd.read_csv("inbuilt_truck_data.csv")
 
 data = load_data()
 
-# Model training
+# -------------------
+# Train Model
+# -------------------
 X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
 y = data['Failure']
 model = RandomForestClassifier()
@@ -23,15 +28,21 @@ model.fit(X, y)
 
 labels = {0: 'Low', 1: 'Medium', 2: 'High'}
 emoji_map = {'Low': '🟢 Low', 'Medium': '🟡 Medium', 'High': '🔴 High'}
-predictions = model.predict(X)
-data['Failure Risk'] = [emoji_map[labels[p]] for p in predictions]
 
-# Navigation
-tab = st.sidebar.radio("📂 Navigate", ["Overview", "Notes Analyzer", "Reports"])
+# -------------------
+# Tab Layout
+# -------------------
+tab1, tab2, tab3 = st.tabs(["🏠 Dashboard", "🛠️ Note Analyzer", "📄 Report"])
 
-# Overview Tab
-if tab == "Overview":
-    st.title("🚚 Truck Health Overview")
+# -------------------
+# TAB 1: Dashboard
+# -------------------
+with tab1:
+    st.markdown("### 🔍 Health Prediction Based on Inbuilt Data")
+
+    predictions = model.predict(X)
+    data['Failure Risk'] = [emoji_map[labels[p]] for p in predictions]
+
     st.dataframe(data)
 
     label_series = pd.Series([labels[p] for p in predictions])
@@ -42,16 +53,19 @@ if tab == "Overview":
     col2.metric("🟡 Medium Risk", emoji_counts.get('🟡 Medium', 0))
     col3.metric("🔴 High Risk", emoji_counts.get('🔴 High', 0))
 
-# Notes Analyzer Tab
-elif tab == "Notes Analyzer":
-    st.title("🛠️ Mechanic Notes Analyzer")
-    st.write("Paste comments to see keywords and get AI suggestions.")
+# -------------------
+# TAB 2: Note Analyzer with AI Suggestions
+# -------------------
+with tab2:
+    st.markdown("### 🛠️ Mechanic Notes Analyzer")
+    st.write("Enter mechanic comments below to detect key issues and get AI suggestions.")
 
-    text_input = st.text_area("📝 Mechanic Comment", placeholder="E.g., Engine overheating, oil pressure low...")
+    text_input = st.text_area("📝 Mechanic Comment", placeholder="E.g., Oil leak detected near the filter. RPM drops at idle...", height=150)
+    submit = st.button("Analyze Comments")
 
-    if st.button("Analyze"):
+    if submit:
         if text_input.strip() == "":
-            st.warning("⚠️ Please enter a comment before submitting.")
+            st.error("❌ Please enter a comment before submitting.")
         else:
             logs = [text_input]
             vectorizer = TfidfVectorizer(stop_words='english')
@@ -66,49 +80,24 @@ elif tab == "Notes Analyzer":
             for word, score in sorted_keywords:
                 st.markdown(f"- `{word}` (score: {score:.2f})")
 
-            st.markdown("### 💡 AI Suggestions:")
-            suggestions = []
-            comment = text_input.lower()
-            if "oil" in comment:
-                suggestions.append("Check for oil leaks or clogged oil filters.")
-            if "overheat" in comment or "coolant" in comment:
-                suggestions.append("Inspect radiator and coolant level.")
-            if "rpm" in comment or "idle" in comment:
-                suggestions.append("Throttle body or sensor may need calibration.")
-            if "vibration" in comment:
-                suggestions.append("Inspect engine mounts or wheels.")
-            if not suggestions:
-                suggestions.append("No urgent issues detected. Further inspection may be needed.")
+            # Simple AI-based suggestions
+            st.markdown("### 🤖 AI-Based Recommendations:")
+            for word, _ in sorted_keywords:
+                if "oil" in word:
+                    st.markdown("- 🔧 Check oil filter and oil level.")
+                elif "coolant" in word:
+                    st.markdown("- 💧 Inspect the coolant system for leaks.")
+                elif "rpm" in word or "idle" in word:
+                    st.markdown("- ⚙️ Inspect throttle body and idle control valve.")
+                elif "engine" in word:
+                    st.markdown("- 🛠️ Perform full engine diagnostic.")
+                elif "leak" in word:
+                    st.markdown("- 🚿 Trace fluid leaks using pressure test.")
 
-            for tip in suggestions:
-                st.markdown(f"🔧 {tip}")
-
-# Reports Tab
-elif tab == "Reports":
-    st.title("🧾 Maintenance Report Generator")
-    st.write("Download a full report of the latest truck health summary.")
-
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
-    total = len(data)
-    low = data['Failure Risk'].value_counts().get('🟢 Low', 0)
-    med = data['Failure Risk'].value_counts().get('🟡 Medium', 0)
-    high = data['Failure Risk'].value_counts().get('🔴 High', 0)
-
-    if st.button("📄 Generate PDF Report"):
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        pdf.cell(200, 10, txt="Truck AI Health Report", ln=True, align="C")
-        pdf.ln(10)
-        pdf.cell(200, 10, txt=f"Generated on: {now}", ln=True)
-        pdf.ln(5)
-        pdf.cell(200, 10, txt=f"Total Records: {total}", ln=True)
-        pdf.cell(200, 10, txt=f"Low Risk: {low} | Medium Risk: {med} | High Risk: {high}", ln=True)
-        pdf.ln(10)
-        pdf.cell(200, 10, txt="This report summarizes the latest prediction results.", ln=True)
-
-        pdf_output = io.BytesIO()
-        pdf.output(pdf_output)
-        b64 = base64.b64encode(pdf_output.getvalue()).decode()
-        href = f'<a href="data:application/octet-stream;base64,{b64}" download="truck_ai_report.pdf">📥 Download PDF Report</a>'
-        st.markdown(href, unsafe_allow_html=True)
+# -------------------
+# TAB 3: Downloadable Report (Placeholder)
+# -------------------
+with tab3:
+    st.markdown("### 📄 Download Maintenance Report")
+    st.write("This section will generate a PDF report of truck diagnostics and NLP suggestions.")
+    st.info("📌 Report download feature coming next. For now, all data is visible in tabs above.")
