@@ -3,9 +3,10 @@ import pandas as pd
 import hashlib
 import os
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.feature_extraction.text import TTfidfVectorizer
 from fpdf import FPDF
 from datetime import datetime
+import plotly.express as px
 
 USER_FILE = "users.csv"
 
@@ -28,7 +29,9 @@ def save_user(username, password_hash):
     return True
 
 st.set_page_config(page_title="Isuzu 4JJ1 AI System", layout="wide")
-st.title("🚚 Truck Maintenance System - Secure Access")
+st.markdown("""
+<h1 style='text-align:center;color:#FF0000;'>🚚 Isuzu 4JJ1 AI Maintenance Dashboard</h1>
+""", unsafe_allow_html=True)
 
 menu = ["Login", "Register"]
 choice = st.sidebar.selectbox("Menu", menu)
@@ -39,7 +42,7 @@ if "user" not in st.session_state:
     st.session_state.user = ""
 
 if choice == "Register":
-    st.subheader("Create New Account")
+    st.subheader("🔐 Register")
     new_user = st.text_input("Username")
     new_pass = st.text_input("Password", type="password")
     confirm_pass = st.text_input("Confirm Password", type="password")
@@ -56,7 +59,7 @@ if choice == "Register":
                 st.error("Username already exists.")
 
 elif choice == "Login":
-    st.subheader("Login to Your Account")
+    st.subheader("🔐 Login")
     user = st.text_input("Username")
     passwd = st.text_input("Password", type="password")
     if st.button("Login"):
@@ -66,49 +69,54 @@ elif choice == "Login":
             if users[users["username"] == user]["password"].values[0] == hashed:
                 st.session_state.auth = True
                 st.session_state.user = user
-                st.success(f"Welcome, {user}!")
+                st.success(f"✅ Welcome, {user}!")
             else:
                 st.error("Incorrect password.")
         else:
             st.error("User not found.")
 
 if st.session_state.auth:
-    st.markdown("---")
-    st.markdown(f"### 👤 Logged in as: `{st.session_state.user}`")
-
     @st.cache_data
     def load_data():
         return pd.read_csv("inbuilt_truck_data.csv")
 
     data = load_data()
-
-    X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
-    y = data['Failure']
+    X = data[["Engine_Temp", "Oil_Pressure", "RPM", "Mileage"]]
+    y = data["Failure"]
     model = RandomForestClassifier()
     model.fit(X, y)
 
     labels = {0: 'Low', 1: 'Medium', 2: 'High'}
     emoji_map = {'Low': '🟢 Low', 'Medium': '🟡 Medium', 'High': '🔴 High'}
+    predictions = model.predict(X)
+    data['Failure Risk'] = [emoji_map[labels[p]] for p in predictions]
+    label_series = pd.Series([labels[p] for p in predictions])
+    emoji_counts = label_series.map(emoji_map).value_counts()
 
-    tab1, tab2, tab3 = st.tabs(["🏠 Dashboard", "🛠️ Notes", "📄 Report"])
+    tab1, tab2, tab3, tab4 = st.tabs(["🏠 Dashboard", "📊 Visualize", "🛠️ Notes", "📄 Report"])
 
     with tab1:
         st.markdown("### 📊 Truck Health Overview")
-        predictions = model.predict(X)
-        data['Failure Risk'] = [emoji_map[labels[p]] for p in predictions]
         st.dataframe(data, use_container_width=True)
-
-        label_series = pd.Series([labels[p] for p in predictions])
-        emoji_counts = label_series.map(emoji_map).value_counts()
         st.metric("🟢 Low", emoji_counts.get('🟢 Low', 0))
         st.metric("🟡 Medium", emoji_counts.get('🟡 Medium', 0))
         st.metric("🔴 High", emoji_counts.get('🔴 High', 0))
 
     with tab2:
+        st.markdown("### 📈 Failure Risk Charts")
+        bar_fig = px.bar(x=emoji_counts.index, y=emoji_counts.values, color=emoji_counts.index,
+                         labels={"x": "Risk Level", "y": "Truck Count"},
+                         title="Failure Risk Distribution")
+        st.plotly_chart(bar_fig, use_container_width=True)
+
+        pie_fig = px.pie(names=emoji_counts.index, values=emoji_counts.values,
+                         title="Risk Proportion", color_discrete_sequence=px.colors.sequential.RdBu)
+        st.plotly_chart(pie_fig, use_container_width=True)
+
+    with tab3:
         st.markdown("### 🛠️ Mechanic Note Analyzer")
         text_input = st.text_area("✍️ Enter mechanic comments", height=150)
         analyze = st.button("📎 Analyze Note")
-
         keywords_list = []
         ai_suggestions = []
 
@@ -148,7 +156,7 @@ if st.session_state.auth:
                         ai_suggestions.append(sug)
                         st.markdown(sug)
 
-    with tab3:
+    with tab4:
         st.markdown("### 📄 Generate PDF Report")
 
         def generate_pdf(keywords_list, ai_suggestions):
