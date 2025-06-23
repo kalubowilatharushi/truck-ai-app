@@ -3,7 +3,7 @@ import pandas as pd
 import hashlib
 import os
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.feature_extraction.text import TTfidfVectorizer
+from sklearn.feature_extraction.text import TfidfVectorizer
 from fpdf import FPDF
 from datetime import datetime
 import plotly.express as px
