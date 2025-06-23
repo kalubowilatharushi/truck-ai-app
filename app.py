@@ -29,9 +29,7 @@ def save_user(username, password_hash):
     return True
 
 st.set_page_config(page_title="Isuzu 4JJ1 AI System", layout="wide")
-st.markdown("""
-<h1 style='text-align:center;color:#FF0000;'>🚚 Isuzu 4JJ1 AI Maintenance Dashboard</h1>
-""", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align:center;color:#FF0000;'>🚚 Isuzu 4JJ1 AI Maintenance Dashboard</h1>", unsafe_allow_html=True)
 
 menu = ["Login", "Register"]
 choice = st.sidebar.selectbox("Menu", menu)
@@ -81,8 +79,8 @@ if st.session_state.auth:
         return pd.read_csv("inbuilt_truck_data.csv")
 
     data = load_data()
-    X = data[["Engine_Temp", "Oil_Pressure", "RPM", "Mileage"]]
-    y = data["Failure"]
+    X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
+    y = data['Failure']
     model = RandomForestClassifier()
     model.fit(X, y)
 
