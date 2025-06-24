@@ -29,7 +29,9 @@ def save_user(username, password_hash):
     return True
 
 st.set_page_config(page_title="Isuzu 4JJ1 AI System", layout="wide")
-st.markdown("<h1 style='text-align:center;color:#FF0000;'>🚚 Isuzu 4JJ1 AI Maintenance Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("""
+<h1 style='text-align:center;color:#FF0000;'>🚚 Isuzu 4JJ1 AI Maintenance Dashboard</h1>
+""", unsafe_allow_html=True)
 
 menu = ["Login", "Register"]
 choice = st.sidebar.selectbox("Menu", menu)
@@ -38,6 +40,12 @@ if "auth" not in st.session_state:
     st.session_state.auth = False
 if "user" not in st.session_state:
     st.session_state.user = ""
+if "keywords" not in st.session_state:
+    st.session_state.keywords = []
+if "recommendations" not in st.session_state:
+    st.session_state.recommendations = []
+if "steps" not in st.session_state:
+    st.session_state.steps = []
 
 if choice == "Register":
     st.subheader("🔐 Register")
@@ -115,8 +123,6 @@ if st.session_state.auth:
         st.markdown("### 🛠️ Mechanic Note Analyzer")
         text_input = st.text_area("✍️ Enter mechanic comments", height=150)
         analyze = st.button("📎 Analyze Note")
-        keywords_list = []
-        ai_suggestions = []
 
         if analyze:
             if text_input.strip() == "":
@@ -127,59 +133,76 @@ if st.session_state.auth:
                 X_text = vectorizer.fit_transform(logs)
                 feature_names = vectorizer.get_feature_names_out()
                 scores = X_text.toarray().flatten()
-
                 keywords = list(zip(feature_names, scores))
                 sorted_keywords = sorted(keywords, key=lambda x: x[1], reverse=True)[:5]
+
+                st.session_state.keywords = [kw[0] for kw in sorted_keywords]
+                st.session_state.recommendations.clear()
+                st.session_state.steps.clear()
 
                 st.success("✅ Top Keywords:")
                 for word, score in sorted_keywords:
                     st.markdown(f"- `{word}` (score: {score:.2f})")
-                    keywords_list.append(word)
 
-                st.markdown("### 🤖 AI-Based Suggestions")
+                st.markdown("### 🤖 AI-Based Recommendations and Steps")
                 for word, _ in sorted_keywords:
                     if "oil" in word:
-                        sug = "- 🔧 Check oil filter and oil level."
+                        st.session_state.recommendations.append("🔧 Check oil filter and oil level.")
+                        st.session_state.steps.append("1. Locate oil filter.\n2. Inspect for leaks.\n3. Replace if clogged.")
                     elif "coolant" in word:
-                        sug = "- 💧 Inspect coolant system."
+                        st.session_state.recommendations.append("💧 Inspect coolant system.")
+                        st.session_state.steps.append("1. Check coolant level.\n2. Look for leaks.\n3. Pressure test radiator.")
                     elif "rpm" in word or "idle" in word:
-                        sug = "- ⚙️ Inspect throttle body & idle control valve."
+                        st.session_state.recommendations.append("⚙️ RPM irregular – check sensors.")
+                        st.session_state.steps.append("1. Scan idle speed.\n2. Inspect throttle body.\n3. Calibrate if needed.")
                     elif "engine" in word:
-                        sug = "- 🛠️ Run engine diagnostics."
+                        st.session_state.recommendations.append("🛠️ Run engine diagnostics.")
+                        st.session_state.steps.append("1. Connect OBD scanner.\n2. Analyze fault codes.\n3. Schedule deep inspection.")
                     elif "leak" in word:
-                        sug = "- 🚿 Pressure test for leaks."
+                        st.session_state.recommendations.append("🚿 Pressure test for leaks.")
+                        st.session_state.steps.append("1. Identify fluid source.\n2. Use dye tracer.\n3. Seal or replace part.")
                     else:
-                        sug = "- ⚙️ Perform standard inspection."
-                    if sug not in ai_suggestions:
-                        ai_suggestions.append(sug)
-                        st.markdown(sug)
+                        st.session_state.recommendations.append("⚙️ Perform general inspection.")
+                        st.session_state.steps.append("1. Review truck logs.\n2. Visual check.\n3. Record anomalies.")
+
+                for rec, step in zip(st.session_state.recommendations, st.session_state.steps):
+                    st.markdown(f"**{rec}**\n\n{step}")
 
     with tab4:
-        st.markdown("### 📄 Generate PDF Report")
+        st.markdown("### 📄 Preview & Download Report")
 
-        def generate_pdf(keywords_list, ai_suggestions):
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, txt="Isuzu 4JJ1 - Maintenance Report", ln=True, align='C')
-            pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
-            pdf.ln(10)
-            pdf.set_font("Arial", size=11)
-            pdf.cell(200, 10, txt="Top Keywords:", ln=True)
-            for kw in keywords_list:
-                pdf.cell(200, 10, txt=f"- {kw}", ln=True)
-            pdf.ln(5)
-            pdf.cell(200, 10, txt="AI Suggestions:", ln=True)
-            for sug in ai_suggestions:
-                pdf.multi_cell(200, 10, txt=sug)
-            return pdf
+        if st.session_state.keywords:
+            st.write("#### ✅ Summary Preview")
+            st.markdown("**Top Keywords:**")
+            for kw in st.session_state.keywords:
+                st.markdown(f"- {kw}")
 
-        if st.button("📥 Generate PDF Report"):
-            if not keywords_list or not ai_suggestions:
-                st.warning("⚠️ Please analyze notes in the Notes tab first.")
-            else:
-                pdf = generate_pdf(keywords_list, ai_suggestions)
-                pdf_path = "maintenance_report.pdf"
-                pdf.output(pdf_path)
-                with open(pdf_path, "rb") as f:
+            st.markdown("**AI Recommendations with Steps:**")
+            for rec, step in zip(st.session_state.recommendations, st.session_state.steps):
+                st.markdown(f"**{rec}**\n\n{step}")
+
+            def generate_pdf(keywords_list, ai_recs, steps):
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font("Arial", size=12)
+                pdf.cell(200, 10, txt="Isuzu 4JJ1 - Maintenance Report", ln=True, align='C')
+                pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
+                pdf.ln(10)
+                pdf.set_font("Arial", size=11)
+                pdf.cell(200, 10, txt="Top Keywords:", ln=True)
+                for kw in keywords_list:
+                    pdf.cell(200, 10, txt=f"- {kw}", ln=True)
+                pdf.ln(5)
+                pdf.cell(200, 10, txt="AI Recommendations:", ln=True)
+                for rec, step in zip(ai_recs, steps):
+                    pdf.multi_cell(200, 10, txt=f"{rec}\n{step}")
+                return pdf
+
+            if st.button("📥 Download Report PDF"):
+                pdf = generate_pdf(st.session_state.keywords, st.session_state.recommendations, st.session_state.steps)
+                path = "maintenance_report.pdf"
+                pdf.output(path)
+                with open(path, "rb") as f:
                     st.download_button("📄 Download PDF", f, file_name="maintenance_report.pdf")
+        else:
+            st.info("📝 Please analyze a mechanic comment first from the 'Notes' tab.")
