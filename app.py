@@ -151,32 +151,32 @@ if st.session_state.auth:
                 for word, _ in sorted_keywords:
                     if "oil" in word:
                         st.session_state.recommendations.append("ðŸ”§ Check oil filter and oil level.")
-                        st.session_state.steps.append("1. Locate oil filter.
+                        st.session_state.steps.append("1. Locate oil filter.\n2. Inspect for leaks.\n3. Replace if clogged.")
 2. Inspect for leaks.
 3. Replace if clogged.")
                     elif "coolant" in word:
                         st.session_state.recommendations.append("ðŸ’§ Inspect coolant system.")
-                        st.session_state.steps.append("1. Check coolant level.
+                        st.session_state.steps.append("1. Check coolant level.\n2. Look for leaks.\n3. Pressure test radiator.")
 2. Look for leaks.
 3. Pressure test radiator.")
                     elif "rpm" in word or "idle" in word:
                         st.session_state.recommendations.append("âš™ï¸ RPM irregular â€“ check sensors.")
-                        st.session_state.steps.append("1. Scan idle speed.
+                        st.session_state.steps.append("1. Scan idle speed.\n2. Inspect throttle body.\n3. Calibrate if needed.")
 2. Inspect throttle body.
 3. Calibrate if needed.")
                     elif "engine" in word:
                         st.session_state.recommendations.append("ðŸ› ï¸ Run engine diagnostics.")
-                        st.session_state.steps.append("1. Connect OBD scanner.
+                        st.session_state.steps.append("1. Connect OBD scanner.\n2. Analyze fault codes.\n3. Schedule deep inspection.")
 2. Analyze fault codes.
 3. Schedule deep inspection.")
                     elif "leak" in word:
                         st.session_state.recommendations.append("ðŸš¿ Pressure test for leaks.")
-                        st.session_state.steps.append("1. Identify fluid source.
+                        st.session_state.steps.append("1. Identify fluid source.\n2. Use dye tracer.\n3. Seal or replace part.")
 2. Use dye tracer.
 3. Seal or replace part.")
                     else:
                         st.session_state.recommendations.append("âš™ï¸ Perform general inspection.")
-                        st.session_state.steps.append("1. Review truck logs.
+                        st.session_state.steps.append("1. Review truck logs.\n2. Visual check.\n3. Record anomalies.")
 2. Visual check.
 3. Record anomalies.")
 
