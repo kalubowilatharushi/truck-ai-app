@@ -5,7 +5,7 @@ import os
 import re
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
-from fpdf 
+from fpdf import FPDF
 from datetime import datetime
 import plotly.express as px
 
