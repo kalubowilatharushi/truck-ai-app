@@ -5,134 +5,163 @@ from sklearn.feature_extraction.text import TfidfVectorizer
 import matplotlib.pyplot as plt
 from fpdf import FPDF
 import datetime
+import numpy as np
 
-# 1. Setup
+# Page configuration
 st.set_page_config(page_title="Isuzu 4JJ1 AI System", layout="wide")
-st.markdown("<h1 style='text-align:center;'>🚚 Truck Health Dashboard</h1>", unsafe_allow_html=True)
 
-# 2. Load inbuilt 1000-record dataset
+# --------- Load Inbuilt Data
 @st.cache_data
 def load_data():
-    df = pd.read_csv("inbuilt_truck_data.csv")  # You must include this CSV in your repo
+    rng = np.random.default_rng(seed=42)
+    df = pd.DataFrame({
+        'Engine_Temp': rng.integers(70, 110, 1000),
+        'Oil_Pressure': rng.integers(15, 35, 1000),
+        'RPM': rng.integers(1800, 3500, 1000),
+        'Mileage': rng.integers(90000, 180000, 1000)
+    })
+    def classify(row):
+        score = row['Engine_Temp'] + (40 - row['Oil_Pressure']) + (row['RPM']//100) + (row['Mileage']//10000)
+        if score < 200: return 0
+        elif score < 250: return 1
+        else: return 2
+    df['Failure'] = df.apply(classify, axis=1)
     return df
 
-df = load_data()
-
-# 3. Train model
-X = df[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
-y = df['Failure']
+data = load_data()
+X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
+y = data['Failure']
 model = RandomForestClassifier()
 model.fit(X, y)
 labels = {0: 'Low', 1: 'Medium', 2: 'High'}
-df['Predicted_Risk'] = model.predict(X)
-df['Risk_Label'] = df['Predicted_Risk'].map(labels)
 
-# 4. Sidebar Navigation
-tab = st.sidebar.radio("📂 Select Page", ["🏠 Dashboard", "🛠️ Note Analyzer", "📄 Report"])
+# --------- Sidebar Navigation
+tabs = st.sidebar.radio("📁 Navigation", ["🏠 Dashboard", "🛠️ Note Analyzer", "📄 Report"])
 
-# 5. 🏠 Dashboard Tab
-if tab == "🏠 Dashboard":
-    st.subheader("📊 Fleet Overview")
+# --------- Dashboard Tab
+if tabs == "🏠 Dashboard":
+    st.title("🚚 AI - Truck Health Dashboard")
 
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Low Risk", str(sum(df['Risk_Label'] == 'Low')))
-    col2.metric("Medium Risk", str(sum(df['Risk_Label'] == 'Medium')))
-    col3.metric("High Risk", str(sum(df['Risk_Label'] == 'High')))
+    # Metrics Summary
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Fleet Health", "92%", "+2%")
+    col2.metric("Active Alerts", "4", "1 critical")
+    col3.metric("Uptime", "15%", "+3%")
+    col4.metric("Downtime ↓", "25%", "-5%")
 
-    st.markdown("---")
-    st.subheader("📈 Risk Level Distribution")
+    # Failure Trend Bar Chart
+    st.subheader("📈 Failure Prediction Trends")
+    weekly_sample = data.sample(300).copy()
+    weekly_sample['week'] = [f"Week {i%12+1}" for i in range(300)]
+    trend_data = weekly_sample.groupby(['week', 'Failure']).size().unstack(fill_value=0).sort_index()
+    trend_data.rename(columns=labels, inplace=True)
 
-    risk_counts = df['Risk_Label'].value_counts()
     fig1, ax1 = plt.subplots()
-    risk_counts.plot(kind='bar', color=['green', 'orange', 'red'], ax=ax1)
-    ax1.set_ylabel("Count")
-    ax1.set_title("Predicted Failure Risk Levels")
+    trend_data.plot(kind='bar', stacked=True, ax=ax1, colormap="coolwarm")
     st.pyplot(fig1)
 
-    st.markdown("---")
-    st.subheader("🥧 Risk Pie Chart")
-
+    # Failure Type Pie Chart
+    st.subheader("📊 Failure Types")
+    failure_counts = data['Failure'].map(labels).value_counts()
     fig2, ax2 = plt.subplots()
-    ax2.pie(risk_counts, labels=risk_counts.index, autopct='%1.1f%%', startangle=140)
+    ax2.pie(failure_counts, labels=failure_counts.index, autopct='%1.1f%%', startangle=90)
     ax2.axis('equal')
     st.pyplot(fig2)
 
-    st.markdown("---")
-    st.subheader("🚛 Recent Activity")
+    # Vehicle Progress
+    st.subheader("🚛 Vehicle Statuses")
+    for i, truck in enumerate(["TRK-001", "TRK-007", "TRK-004", "TRK-002"]):
+        progress = [80, 25, 60, 45][i]
+        st.progress(progress)
+        st.write(f"**{truck}** – {'At Risk' if progress < 50 else 'Operational'} ({progress}%)")
+
+    # Activity Feed
+    st.subheader("🕒 Recent Activity")
     st.markdown("""
-    - ✅ Model trained on 1000 real entries  
-    - 📤 Dashboard synced with prediction output  
-    - 📥 Fleet insights updated live  
+    - ✅ Report generated (5 mins ago)  
+    - 🔍 Log analyzed: TRK-007 (2 hrs ago)  
+    - ⚠️ Alert for TRK-001 (8 hrs ago)  
+    - 🛠️ Warning cleared: TRK-004 (1 day ago)  
     """)
 
-# 6. 🛠️ Note Analyzer
-elif tab == "🛠️ Note Analyzer":
-    st.subheader("🛠️ Mechanic Note Analyzer")
+# --------- NLP Analyzer Tab
+elif tabs == "🛠️ Note Analyzer":
+    st.title("🛠️ Mechanic Notes Analyzer")
 
-    note = st.text_area("✏️ Enter a mechanic comment:")
-    if st.button("Analyze"):
-        if note.strip() == "":
+    user_input = st.text_area("Enter mechanic notes here:")
+    if st.button("Analyze Note"):
+        if not user_input.strip():
             st.warning("⚠️ Please enter a comment before submitting.")
         else:
-            # NLP
             vectorizer = TfidfVectorizer(stop_words='english')
-            tfidf = vectorizer.fit_transform([note])
-            keywords = vectorizer.get_feature_names_out()
+            tfidf = vectorizer.fit_transform([user_input])
+            features = vectorizer.get_feature_names_out()
             scores = tfidf.toarray().flatten()
-            top_keywords = sorted(zip(keywords, scores), key=lambda x: x[1], reverse=True)[:5]
+            top_keywords = sorted(zip(features, scores), key=lambda x: x[1], reverse=True)[:5]
 
-            st.success("✅ Top Keywords:")
+            st.success("✅ Analysis complete!")
+            st.subheader("🔑 Top Keywords")
             for word, score in top_keywords:
                 st.markdown(f"- `{word}` (Score: {score:.2f})")
 
-            # AI Suggestions (basic)
-            ai_suggestions = []
-            if "oil" in note:
-                ai_suggestions.append("Check oil pressure and filter system.")
-            if "coolant" in note or "temperature" in note:
-                ai_suggestions.append("Inspect cooling system and radiator.")
+            # AI Suggestions (simple logic-based)
+            ai_recs, steps = [], []
+            if "oil" in user_input or "pressure" in user_input:
+                ai_recs.append("🔧 Check oil pressure system")
+                steps.append("1. Inspect oil pump\n2. Replace filter\n3. Refill oil")
+            if "engine" in user_input or "heat" in user_input:
+                ai_recs.append("🌡️ Check engine cooling")
+                steps.append("1. Check coolant level\n2. Inspect radiator\n3. Replace fan if faulty")
 
             st.subheader("🤖 AI Recommendations")
-            if ai_suggestions:
-                for rec in ai_suggestions:
-                    st.markdown(f"- {rec}")
-            else:
-                st.info("No recommendations found.")
+            for rec in ai_recs:
+                st.markdown(f"- {rec}")
 
-            # Save for report
+            st.subheader("🧭 Troubleshooting Steps")
+            for step in steps:
+                st.markdown(f"- {step}")
+
+            # Save to session state
             st.session_state['keywords'] = top_keywords
-            st.session_state['recommendations'] = ai_suggestions
+            st.session_state['recs'] = ai_recs
+            st.session_state['steps'] = steps
 
-# 7. 📄 Report Tab
-elif tab == "📄 Report":
-    st.subheader("📄 Generate Maintenance Report")
+# --------- Report Tab
+elif tabs == "📄 Report":
+    st.title("📄 Generate PDF Report")
 
-    if 'keywords' not in st.session_state:
-        st.info("Analyze a comment first in the Note Analyzer tab.")
+    if "keywords" not in st.session_state:
+        st.info("ℹ️ No analysis yet. Please use the Note Analyzer first.")
     else:
-        if st.button("📥 Download PDF Report"):
+        if st.button("📤 Download PDF Report"):
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", size=12)
 
-            pdf.cell(200, 10, txt="Truck Maintenance Report", ln=True, align="C")
-            pdf.cell(200, 10, txt=datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), ln=True, align="C")
+            pdf.cell(200, 10, "Truck AI Maintenance Report", ln=True, align="C")
+            pdf.cell(200, 10, datetime.datetime.now().strftime("%Y-%m-%d %H:%M"), ln=True, align="C")
             pdf.ln(10)
 
             pdf.set_font("Arial", 'B', 12)
-            pdf.cell(200, 10, txt="Top Keywords", ln=True)
+            pdf.cell(200, 10, "Top Keywords:", ln=True)
             pdf.set_font("Arial", size=12)
-            for kw, sc in st.session_state['keywords']:
-                pdf.cell(200, 10, txt=f"- {kw} (score: {sc:.2f})", ln=True)
+            for word, score in st.session_state['keywords']:
+                pdf.cell(200, 10, f"- {word} ({score:.2f})", ln=True)
 
             pdf.ln(5)
             pdf.set_font("Arial", 'B', 12)
-            pdf.cell(200, 10, txt="AI Suggestions", ln=True)
+            pdf.cell(200, 10, "AI Recommendations:", ln=True)
             pdf.set_font("Arial", size=12)
-            for rec in st.session_state['recommendations']:
-                pdf.multi_cell(0, 10, txt=f"- {rec}")
+            for r in st.session_state['recs']:
+                pdf.multi_cell(0, 10, f"- {r}")
 
-            file_path = "maintenance_report.pdf"
-            pdf.output(file_path)
-            with open(file_path, "rb") as f:
-                st.download_button("📤 Download PDF", f, file_name="maintenance_report.pdf", mime="application/pdf")
+            pdf.ln(5)
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(200, 10, "Troubleshooting Steps:", ln=True)
+            pdf.set_font("Arial", size=12)
+            for s in st.session_state['steps']:
+                pdf.multi_cell(0, 10, f"- {s}")
+
+            pdf.output("truck_report.pdf")
+            with open("truck_report.pdf", "rb") as f:
+                st.download_button("📥 Download Report", f, file_name="truck_report.pdf", mime="application/pdf")
