@@ -1,211 +1,172 @@
 import streamlit as st
 import pandas as pd
-import hashlib
-import os
-import re
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
+import matplotlib.pyplot as plt
 from fpdf import FPDF
-from datetime import datetime
-import plotly.express as px
-
-USER_FILE = "users.csv"
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
-
-def load_users():
-    if os.path.exists(USER_FILE):
-        return pd.read_csv(USER_FILE)
-    else:
-        return pd.DataFrame(columns=["username", "password"])
-
-def save_user(username, password_hash):
-    users = load_users()
-    if username in users["username"].values:
-        return False
-    new_user = pd.DataFrame([[username, password_hash]], columns=["username", "password"])
-    users = pd.concat([users, new_user], ignore_index=True)
-    users.to_csv(USER_FILE, index=False)
-    return True
-
-def remove_emojis(text):
-    return re.sub(r'[^\x00-\x7F]+', '', text)
+import datetime
+import random
 
 st.set_page_config(page_title="Isuzu 4JJ1 AI System", layout="wide")
-st.markdown("<h1 style='text-align:center;color:#FF0000;'>🚚 Isuzu 4JJ1 AI Maintenance Dashboard</h1>", unsafe_allow_html=True)
 
-menu = ["Login", "Register"]
-choice = st.sidebar.selectbox("Menu", menu)
+# ---------- Inbuilt Data (1000 records)
+@st.cache_data
+def load_data():
+    import numpy as np
+    rng = np.random.default_rng(seed=42)
+    df = pd.DataFrame({
+        'Engine_Temp': rng.integers(70, 110, 1000),
+        'Oil_Pressure': rng.integers(15, 35, 1000),
+        'RPM': rng.integers(1800, 3500, 1000),
+        'Mileage': rng.integers(90000, 180000, 1000)
+    })
+    # Risk Level
+    def classify(row):
+        score = row['Engine_Temp'] + (40 - row['Oil_Pressure']) + (row['RPM']//100) + (row['Mileage']//10000)
+        if score < 200: return 0
+        elif score < 250: return 1
+        else: return 2
+    df['Failure'] = df.apply(classify, axis=1)
+    return df
 
-if "auth" not in st.session_state:
-    st.session_state.auth = False
-if "user" not in st.session_state:
-    st.session_state.user = ""
-if "keywords" not in st.session_state:
-    st.session_state.keywords = []
-if "recommendations" not in st.session_state:
-    st.session_state.recommendations = []
-if "steps" not in st.session_state:
-    st.session_state.steps = []
+data = load_data()
 
-if choice == "Register":
-    st.subheader("🔐 Register")
-    new_user = st.text_input("Username")
-    new_pass = st.text_input("Password", type="password")
-    confirm_pass = st.text_input("Confirm Password", type="password")
-    if st.button("Register"):
-        if new_pass != confirm_pass:
-            st.warning("Passwords do not match.")
-        elif new_user.strip() == "" or new_pass.strip() == "":
-            st.warning("Please enter valid credentials.")
+# ---------- Train Model
+X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
+y = data['Failure']
+model = RandomForestClassifier()
+model.fit(X, y)
+labels = {0: 'Low', 1: 'Medium', 2: 'High'}
+
+# ---------- Sidebar Navigation
+tabs = st.sidebar.radio("Navigation", ["🏠 Dashboard", "🛠️ Note Analyzer", "📄 Report"])
+
+# ---------- Dashboard
+if tabs == "🏠 Dashboard":
+    st.title("🚚 AI - Truck Health Dashboard")
+
+    # Overview Metrics
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("Overall Fleet Health", "92%", "+2% from last month")
+    col2.metric("Active Alerts", "4", "1 critical")
+    col3.metric("Uptime Increase", "15%", "+3%")
+    col4.metric("Downtime Reduction", "25%", "+5%")
+
+    # Prediction Trends Chart
+    st.subheader("📈 Failure Prediction Trends")
+    fig, ax = plt.subplots()
+    weekly_counts = data.sample(300).copy()
+    weekly_counts['week'] = [f"Week {i%12+1}" for i in range(300)]
+    trend_data = weekly_counts.groupby(['week', 'Failure']).size().unstack(fill_value=0).sort_index()
+    trend_data.rename(columns=labels, inplace=True)
+    trend_data.plot(kind='bar', stacked=True, ax=ax, colormap="cool")
+    st.pyplot(fig)
+
+    # Pie Chart
+    st.subheader("📊 Failure Types")
+    failure_counts = data['Failure'].map(labels).value_counts()
+    fig2, ax2 = plt.subplots()
+    ax2.pie(failure_counts, labels=failure_counts.index, autopct='%1.1f%%', startangle=90)
+    ax2.axis('equal')
+    st.pyplot(fig2)
+
+    # Vehicle Status
+    st.subheader("🚛 Vehicle Status")
+    for i, label in enumerate(["TRK-001", "TRK-007", "TRK-004", "TRK-002"]):
+        status = ["Operational", "Maintenance", "Operational", "At Risk"]
+        percent = [80, 25, 60, 45]
+        st.progress(percent[i])
+        st.write(f"**{label}** – {status[i]} ({percent[i]}%)")
+
+    # Recent Activity
+    st.subheader("🕒 Recent Activity")
+    st.markdown("""
+    - ✅ Generated report for Q2 performance (5 mins ago)  
+    - 🔍 Analyzed maintenance log for TRK-007 (2 hrs ago)  
+    - ⚠️ Critical alert triggered for TRK-001 (8 hrs ago)  
+    - 🛠️ Cleared warning alert for TRK-004 (1 day ago)  
+    """)
+
+# ---------- Note Analyzer
+elif tabs == "🛠️ Note Analyzer":
+    st.title("🛠️ Mechanic Notes Analyzer with AI")
+
+    user_note = st.text_area("Enter mechanic note:")
+    if st.button("Analyze Comment"):
+        if user_note.strip() == "":
+            st.warning("⚠️ Please enter a comment before submitting.")
         else:
-            hashed = hash_password(new_pass)
-            if save_user(new_user, hashed):
-                st.success("Account created! You can now log in.")
-            else:
-                st.error("Username already exists.")
+            # TF-IDF NLP
+            vectorizer = TfidfVectorizer(stop_words='english')
+            tfidf = vectorizer.fit_transform([user_note])
+            keywords = vectorizer.get_feature_names_out()
+            scores = tfidf.toarray().flatten()
+            sorted_kw = sorted(zip(keywords, scores), key=lambda x: x[1], reverse=True)[:5]
 
-elif choice == "Login":
-    st.subheader("🔐 Login")
-    user = st.text_input("Username")
-    passwd = st.text_input("Password", type="password")
-    if st.button("Login"):
-        users = load_users()
-        if user in users["username"].values:
-            hashed = hash_password(passwd)
-            if users[users["username"] == user]["password"].values[0] == hashed:
-                st.session_state.auth = True
-                st.session_state.user = user
-                st.success(f"✅ Welcome, {user}!")
-            else:
-                st.error("Incorrect password.")
-        else:
-            st.error("User not found.")
+            st.success("🔍 Analysis Complete!")
+            st.write("**Top Keywords:**")
+            for word, score in sorted_kw:
+                st.write(f"- `{word}` (Score: {score:.2f})")
 
-if st.session_state.auth:
-    @st.cache_data
-    def load_data():
-        return pd.read_csv("inbuilt_truck_data.csv")
+            # AI Suggestions (Sample rules)
+            ai_recs, steps = [], []
+            if "oil" in user_note or "pressure" in user_note:
+                ai_recs.append("Check oil pump and filter")
+                steps.append("1. Locate oil pump\n2. Inspect for clogs\n3. Replace filter if needed")
+            if "engine" in user_note or "temperature" in user_note:
+                ai_recs.append("Inspect cooling system")
+                steps.append("1. Check coolant level\n2. Inspect radiator and fan")
 
-    data = load_data()
-    X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
-    y = data['Failure']
-    model = RandomForestClassifier()
-    model.fit(X, y)
+            st.write("### 🤖 AI Recommendations:")
+            for rec in ai_recs:
+                st.markdown(f"- {rec}")
 
-    labels = {0: 'Low', 1: 'Medium', 2: 'High'}
-    emoji_map = {'Low': '🟢 Low', 'Medium': '🟡 Medium', 'High': '🔴 High'}
-    predictions = model.predict(X)
-    data['Failure Risk'] = [emoji_map[labels[p]] for p in predictions]
-    label_series = pd.Series([labels[p] for p in predictions])
-    emoji_counts = label_series.map(emoji_map).value_counts()
+            st.write("### 📋 Guided Troubleshooting Steps:")
+            for s in steps:
+                st.markdown(f"- {s}")
 
-    tab1, tab2, tab3, tab4 = st.tabs(["🏠 Dashboard", "📊 Visualize", "🛠️ Notes", "📄 Report"])
+            # Save to session
+            st.session_state['report_keywords'] = sorted_kw
+            st.session_state['report_recs'] = ai_recs
+            st.session_state['report_steps'] = steps
 
-    with tab1:
-        st.markdown("### 📊 Truck Health Overview")
-        st.dataframe(data, use_container_width=True)
-        st.metric("🟢 Low", emoji_counts.get('🟢 Low', 0))
-        st.metric("🟡 Medium", emoji_counts.get('🟡 Medium', 0))
-        st.metric("🔴 High", emoji_counts.get('🔴 High', 0))
+# ---------- Report Tab
+elif tabs == "📄 Report":
+    st.title("📄 Maintenance Report Generator")
 
-    with tab2:
-        st.markdown("### 📈 Failure Risk Charts")
-        bar_fig = px.bar(x=emoji_counts.index, y=emoji_counts.values, color=emoji_counts.index,
-                         labels={"x": "Risk Level", "y": "Truck Count"},
-                         title="Failure Risk Distribution")
-        st.plotly_chart(bar_fig, use_container_width=True)
+    if "report_keywords" not in st.session_state:
+        st.info("🔍 No data to generate report. Please analyze a note first.")
+    else:
+        if st.button("📥 Generate PDF Report"):
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
 
-        pie_fig = px.pie(names=emoji_counts.index, values=emoji_counts.values,
-                         title="Risk Proportion", color_discrete_sequence=px.colors.sequential.RdBu)
-        st.plotly_chart(pie_fig, use_container_width=True)
+            pdf.cell(200, 10, txt="Truck AI Maintenance Report", ln=True, align="C")
+            pdf.cell(200, 10, txt=str(datetime.datetime.now().strftime("%Y-%m-%d %H:%M")), ln=True, align="C")
+            pdf.ln(10)
 
-    with tab3:
-        st.markdown("### 🛠️ Mechanic Note Analyzer")
-        text_input = st.text_area("✍️ Enter mechanic comments", height=150)
-        analyze = st.button("📎 Analyze Note")
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(200, 10, txt="Extracted Keywords:", ln=True)
+            pdf.set_font("Arial", size=12)
+            for word, score in st.session_state['report_keywords']:
+                pdf.cell(200, 10, txt=f"- {word} ({score:.2f})", ln=True)
 
-        if analyze:
-            if text_input.strip() == "":
-                st.warning("⚠️ Please enter a comment before submitting.")
-            else:
-                logs = [text_input]
-                vectorizer = TfidfVectorizer(stop_words='english')
-                X_text = vectorizer.fit_transform(logs)
-                feature_names = vectorizer.get_feature_names_out()
-                scores = X_text.toarray().flatten()
+            pdf.ln(5)
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(200, 10, txt="AI Recommendations:", ln=True)
+            pdf.set_font("Arial", size=12)
+            for rec in st.session_state['report_recs']:
+                pdf.multi_cell(0, 10, f"- {rec}")
 
-                keywords = list(zip(feature_names, scores))
-                sorted_keywords = sorted(keywords, key=lambda x: x[1], reverse=True)[:5]
+            pdf.ln(5)
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(200, 10, txt="Guided Steps:", ln=True)
+            pdf.set_font("Arial", size=12)
+            for step in st.session_state['report_steps']:
+                pdf.multi_cell(0, 10, f"- {step}")
 
-                st.session_state.keywords = [kw[0] for kw in sorted_keywords]
-                st.session_state.recommendations.clear()
-                st.session_state.steps.clear()
-
-                st.success("✅ Top Keywords:")
-                for word, score in sorted_keywords:
-                    st.markdown(f"- `{word}` (score: {score:.2f})")
-
-                st.markdown("### 🤖 AI-Based Recommendations and Steps")
-                for word, _ in sorted_keywords:
-                    if "oil" in word:
-                        st.session_state.recommendations.append("🔧 Check oil filter and oil level.")
-                        st.session_state.steps.append("1. Locate oil filter.\\n2. Inspect for leaks.\\n3. Replace if clogged.")
-                    elif "coolant" in word:
-                        st.session_state.recommendations.append("💧 Inspect coolant system.")
-                        st.session_state.steps.append("1. Check coolant level.\\n2. Look for leaks.\\n3. Pressure test radiator.")
-                    elif "rpm" in word or "idle" in word:
-                        st.session_state.recommendations.append("⚙️ RPM irregular – check sensors.")
-                        st.session_state.steps.append("1. Scan idle speed.\\n2. Inspect throttle body.\\n3. Calibrate if needed.")
-                    elif "engine" in word:
-                        st.session_state.recommendations.append("🛠️ Run engine diagnostics.")
-                        st.session_state.steps.append("1. Connect OBD scanner.\\n2. Analyze fault codes.\\n3. Schedule deep inspection.")
-                    elif "leak" in word:
-                        st.session_state.recommendations.append("🚿 Pressure test for leaks.")
-                        st.session_state.steps.append("1. Identify fluid source.\\n2. Use dye tracer.\\n3. Seal or replace part.")
-                    else:
-                        st.session_state.recommendations.append("⚙️ Perform general inspection.")
-                        st.session_state.steps.append("1. Review truck logs.\\n2. Visual check.\\n3. Record anomalies.")
-
-                for rec, step in zip(st.session_state.recommendations, st.session_state.steps):
-                    st.markdown(f"**{rec}**\n\n{step}")
-
-    with tab4:
-        st.markdown("### 📄 Preview & Download Report")
-
-        if st.session_state.keywords:
-            st.write("#### ✅ Summary Preview")
-            st.markdown("**Top Keywords:**")
-            for kw in st.session_state.keywords:
-                st.markdown(f"- {kw}")
-
-            st.markdown("**AI Recommendations with Steps:**")
-            for rec, step in zip(st.session_state.recommendations, st.session_state.steps):
-                st.markdown(f"**{rec}**\n\n{step}")
-
-            def generate_pdf(keywords_list, ai_recs, steps):
-                pdf = FPDF()
-                pdf.add_page()
-                pdf.set_font("Arial", size=12)
-                pdf.cell(200, 10, txt="Isuzu 4JJ1 - Maintenance Report", ln=True, align='C')
-                pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", ln=True, align='C')
-                pdf.ln(10)
-                pdf.set_font("Arial", size=11)
-                pdf.cell(200, 10, txt="Top Keywords:", ln=True)
-                for kw in keywords_list:
-                    pdf.cell(200, 10, txt=f"- {remove_emojis(kw)}", ln=True)
-                pdf.ln(5)
-                pdf.cell(200, 10, txt="AI Recommendations:", ln=True)
-                for rec, step in zip(ai_recs, steps):
-                    pdf.multi_cell(200, 10, txt=remove_emojis(f"{rec}\n{step}"))
-                return pdf
-
-            if st.button("📥 Download Report PDF"):
-                pdf = generate_pdf(st.session_state.keywords, st.session_state.recommendations, st.session_state.steps)
-                path = "maintenance_report.pdf"
-                pdf.output(path)
-                with open(path, "rb") as f:
-                    st.download_button("📄 Download PDF", f, file_name="maintenance_report.pdf")
-        else:
-            st.info("📝 Please analyze a mechanic comment first from the 'Notes' tab.")
+            file_path = "truck_report.pdf"
+            pdf.output(file_path)
+            with open(file_path, "rb") as f:
+                st.download_button("📤 Download Report", f, file_name="truck_report.pdf", mime="application/pdf")
