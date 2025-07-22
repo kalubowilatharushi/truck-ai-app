@@ -105,39 +105,33 @@ elif page == "Note Analyzer":
             for word, score in top_keywords:
                 st.write(f"- {word} ({score:.2f})")
 
-            # AI Suggestions
-            recs, steps = [], []
+            # Add AI Suggestions
+            recommendations = []
             for word, _ in top_keywords:
                 if "oil" in word:
-                    recs.append("🔧 Oil pressure issue suspected.")
-                    steps.append("1. Check oil level\n2. Inspect oil filter\n3. Replace oil if necessary")
+                    recommendations.append("Check oil filter and pressure levels.")
                 elif "engine" in word:
-                    recs.append("🚨 Engine overheating or knocking signs.")
-                    steps.append("1. Inspect engine block\n2. Test coolant system\n3. Check head gasket")
+                    recommendations.append("Inspect engine block and coolant system.")
                 elif "coolant" in word:
-                    recs.append("💧 Coolant problem detected.")
-                    steps.append("1. Top-up coolant\n2. Inspect radiator\n3. Replace coolant cap")
-                elif "vibration" in word or "knocking" in word:
-                    recs.append("⚙️ Engine misfire or spark plug issue.")
-                    steps.append("1. Replace spark plugs\n2. Inspect engine mountings")
-
-            if recs:
+                    recommendations.append("Top-up or replace coolant.")
+                elif "knocking" in word or "vibration" in word:
+                    recommendations.append("Investigate spark plugs and engine mounts.")
+            if recommendations:
                 st.markdown("---")
-                st.write("### 🤖 AI Suggestions:")
-                for r in recs:
-                    st.markdown(f"- {r}")
-                st.markdown("### 🧰 Maintenance Steps:")
-                for s in steps:
-                    st.markdown(f"- {s}")
-
+                st.write("### AI Suggestions:")
+                for tip in recommendations:
+                    st.write("- " + tip)
             st.session_state['keywords'] = top_keywords
             st.session_state['notes'] = text
-            st.session_state['recs'] = recs
-            st.session_state['steps'] = steps
+            st.session_state['recs'] = recommendations
 
 # ---------- Report Generator
 elif page == "Report":
     st.title("📄 Generate Maintenance Report")
+
+    def safe_text(text):
+        return text.encode('latin-1', 'replace').decode('latin-1')
+
     if 'keywords' not in st.session_state:
         st.info("Please run the Note Analyzer first.")
     else:
@@ -145,25 +139,22 @@ elif page == "Report":
             pdf = FPDF()
             pdf.add_page()
             pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, "Truck Maintenance Report", ln=True, align="C")
+            pdf.cell(200, 10, safe_text("Truck Maintenance Report"), ln=True, align="C")
             pdf.ln(10)
-            pdf.multi_cell(0, 10, "Mechanic Notes:")
-            pdf.multi_cell(0, 10, st.session_state['notes'])
 
+            pdf.multi_cell(0, 10, safe_text("Mechanic Notes:"))
+            pdf.multi_cell(0, 10, safe_text(st.session_state['notes']))
             pdf.ln(5)
-            pdf.cell(200, 10, "Top Keywords:", ln=True)
+
+            pdf.cell(200, 10, safe_text("Top Keywords:"), ln=True)
             for word, score in st.session_state['keywords']:
-                pdf.cell(200, 10, f"- {word} ({score:.2f})", ln=True)
+                pdf.cell(200, 10, safe_text(f"- {word} ({score:.2f})"), ln=True)
 
-            pdf.ln(5)
-            pdf.cell(200, 10, "AI Recommendations:", ln=True)
-            for r in st.session_state['recs']:
-                pdf.multi_cell(0, 10, r)
-
-            pdf.ln(5)
-            pdf.cell(200, 10, "Maintenance Steps:", ln=True)
-            for s in st.session_state['steps']:
-                pdf.multi_cell(0, 10, s)
+            if 'recs' in st.session_state:
+                pdf.ln(5)
+                pdf.cell(200, 10, safe_text("AI Recommendations:"), ln=True)
+                for rec in st.session_state['recs']:
+                    pdf.multi_cell(0, 10, safe_text(rec))
 
             filename = "truck_maintenance_report.pdf"
             pdf.output(filename)
