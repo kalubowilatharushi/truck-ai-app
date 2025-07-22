@@ -1,134 +1,161 @@
 import streamlit as st
 import pandas as pd
-import numpy as np
+import matplotlib.pyplot as plt
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
-import matplotlib.pyplot as plt
 from fpdf import FPDF
-import datetime
+import base64
 
-st.set_page_config(page_title="Isuzu 4JJ1 AI System", layout="wide")
+# --- Setup ---
+st.set_page_config(page_title="Truck AI System", layout="wide")
+st.markdown("""
+    <style>
+        .main {background-color: #1c1c1e;}
+        .block-container {padding: 2rem;}
+        .stTabs [role="tablist"] {background: #333;}
+        .stTabs [role="tab"] {color: white;}
+        h1, h2, h3, h4 {color: #fff;}
+    </style>
+""", unsafe_allow_html=True)
 
-# ---------- Load Inbuilt Dataset (1000 samples)
+# --- Inbuilt 1000 Record Dataset ---
 @st.cache_data
 def load_data():
-    rng = np.random.default_rng(seed=42)
-    df = pd.DataFrame({
-        'Engine_Temp': rng.integers(70, 110, 1000),
-        'Oil_Pressure': rng.integers(15, 35, 1000),
-        'RPM': rng.integers(1800, 3500, 1000),
-        'Mileage': rng.integers(90000, 180000, 1000)
-    })
+    df = pd.read_csv("https://raw.githubusercontent.com/kalubowilatharushi/truck-ai-app/main/data/inbuilt_truck_data.csv")
     return df
 
-data = load_data()
+# --- ML Model Training ---
+@st.cache_resource
+def train_model(data):
+    model = RandomForestClassifier()
+    model.fit(data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']], data['Risk_Level'])
+    return model
 
-# ---------- Classify Failure Risk
+df = load_data()
+model = train_model(df)
 
-def classify(row):
-    score = row['Engine_Temp'] + (40 - row['Oil_Pressure']) + (row['RPM'] // 100) + (row['Mileage'] // 10000)
-    if score < 200:
-        return 0
-    elif score < 250:
-        return 1
-    else:
-        return 2
+# --- Failure Issue Mapping ---
+issue_map = {
+    "Low": "Normal",
+    "Medium": "Cooling System",
+    "High": "Oil System, Aging Components, Engine Vibrations, Spark Plug"
+}
+df["Possible_Issue"] = df["Risk_Level"].map(issue_map)
 
-data['Failure'] = data.apply(classify, axis=1)
-labels = {0: 'Low', 1: 'Medium', 2: 'High'}
-data['Risk_Level'] = data['Failure'].map(labels)
+# --- Sidebar Navigation ---
+tab = st.sidebar.radio("Navigate", ["🏠 Dashboard", "🛠️ Note Analyzer", "📄 Report"])
 
-# ---------- Detect Possible Part Failures
-
-def detect_issue(row):
-    issues = []
-    if row['Engine_Temp'] > 100:
-        issues.append("Cooling System")
-    if row['Oil_Pressure'] < 20:
-        issues.append("Oil System")
-    if row['RPM'] > 3000 and row['Engine_Temp'] > 95:
-        issues.append("Spark Plug / Engine Vibrations")
-    if row['Mileage'] > 140000:
-        issues.append("Aging Components")
-    return ", ".join(issues) if issues else "Normal"
-
-data['Possible_Issue'] = data.apply(detect_issue, axis=1)
-
-# ---------- Train Model
-X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
-y = data['Failure']
-model = RandomForestClassifier()
-model.fit(X, y)
-
-# ---------- Navigation
-page = st.sidebar.radio("Navigate", ["Dashboard", "Note Analyzer", "Report"])
-
-# ---------- Dashboard
-if page == "Dashboard":
-    st.title("🚛 Truck AI - Health Prediction Dashboard")
-
+# ========== 🏠 Dashboard Tab ==========
+if tab == "🏠 Dashboard":
+    st.markdown("## 🚚 Truck AI - Health Prediction Dashboard")
     col1, col2, col3 = st.columns(3)
-    col1.metric("Total Trucks", len(data))
-    col2.metric("High Risk Trucks", (data['Failure'] == 2).sum())
-    col3.metric("Failures Detected", (data['Possible_Issue'] != "Normal").sum())
+    col1.metric("Total Trucks", len(df))
+    col2.metric("High Risk Trucks", (df["Risk_Level"] == "High").sum())
+    col3.metric("Failures Detected", (df["Risk_Level"] != "Low").sum())
 
-    # Pie Chart
-    st.subheader("🧩 Failure Cause Distribution")
-    pie_data = data['Possible_Issue'].value_counts()
+    # Failure Cause Distribution (Top 5 + Others)
+    issue_counts = df["Possible_Issue"].str.split(", ").explode().value_counts()
+    top_issues = issue_counts[:5]
+    others = issue_counts[5:].sum()
+    pie_data = top_issues.append(pd.Series({"Others": others}))
+
     fig1, ax1 = plt.subplots()
     ax1.pie(pie_data, labels=pie_data.index, autopct='%1.1f%%')
-    ax1.axis('equal')
+    ax1.set_title("Failure Cause Distribution")
     st.pyplot(fig1)
 
-    # Bar Chart
-    st.subheader("🔧 Failure Cause Frequency")
-    fig2, ax2 = plt.subplots()
-    pie_data.plot(kind='bar', color='tomato', ax=ax2)
+    # Failure Frequency Chart
+    fig2, ax2 = plt.subplots(figsize=(10, 4))
+    top_failures = df["Possible_Issue"].value_counts().head(7)
+    ax2.bar(top_failures.index, top_failures.values, color='tomato')
+    ax2.set_xticklabels(top_failures.index, rotation=30)
     ax2.set_ylabel("Count")
+    ax2.set_title("Failure Cause Frequency")
     st.pyplot(fig2)
 
-    # Data Table
-    st.subheader("📋 Truck Data with Issue Analysis")
-    st.dataframe(data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage', 'Risk_Level', 'Possible_Issue']])
+    # Raw Table
+    st.markdown("### 🧾 Truck Data with Issue Analysis")
+    st.dataframe(df.head(50), use_container_width=True)
 
-# ---------- Note Analyzer
-elif page == "Note Analyzer":
-    st.title("🛠️ Mechanic Note Analyzer")
-    text = st.text_area("Paste mechanic notes:")
-    if st.button("Analyze"):
-        if not text.strip():
-            st.warning("⚠️ Please enter mechanic notes to analyze.")
+# ========== 🛠️ Note Analyzer ==========
+elif tab == "🛠️ Note Analyzer":
+    st.markdown("## 🛠️ Mechanic Note Analyzer")
+    note = st.text_area("Paste mechanic notes:")
+    if st.button("Analyze Notes"):
+        if not note.strip():
+            st.warning("⚠️ Please enter some text to analyze.")
         else:
-            tfidf = TfidfVectorizer(stop_words='english')
-            matrix = tfidf.fit_transform([text])
-            keywords = tfidf.get_feature_names_out()
-            scores = matrix.toarray()[0]
-            top_keywords = sorted(zip(keywords, scores), key=lambda x: x[1], reverse=True)[:5]
-            st.write("**Top Keywords:**")
-            for word, score in top_keywords:
-                st.write(f"- {word} ({score:.2f})")
-            st.session_state['keywords'] = top_keywords
-            st.session_state['notes'] = text
+            logs = [note]
+            vectorizer = TfidfVectorizer(stop_words='english')
+            X_text = vectorizer.fit_transform(logs)
+            feature_names = vectorizer.get_feature_names_out()
+            scores = X_text.toarray().flatten()
+            keywords = sorted(zip(feature_names, scores), key=lambda x: x[1], reverse=True)[:5]
 
-# ---------- Report Generator
-elif page == "Report":
-    st.title("📄 Generate Maintenance Report")
-    if 'keywords' not in st.session_state:
-        st.info("Please run the Note Analyzer first.")
+            st.markdown("### 🔍 Top Keywords")
+            for word, score in keywords:
+                st.markdown(f"- `{word}` (score: {score:.2f})")
+
+            # AI Recommendations (simple example)
+            recommendations = []
+            steps = []
+            if "oil" in note.lower():
+                recommendations.append("🔧 Inspect oil filter and oil levels.")
+                steps.append("1. Locate oil filter.\n2. Inspect for leaks.\n3. Replace if clogged.")
+            if "engine" in note.lower():
+                recommendations.append("⚙️ Run full engine diagnostics.")
+                steps.append("1. Connect diagnostic tool.\n2. Run scan.\n3. Review logs.")
+            if "coolant" in note.lower():
+                recommendations.append("🧊 Check coolant levels and radiator cap.")
+                steps.append("1. Open coolant tank.\n2. Check for low fluid.\n3. Inspect cap pressure.")
+
+            st.markdown("### 🤖 AI Recommendations")
+            for rec in recommendations:
+                st.info(rec)
+
+            st.markdown("### 📝 Guided Steps")
+            for step in steps:
+                st.code(step, language="markdown")
+
+            # Store for PDF
+            st.session_state["report_note"] = note
+            st.session_state["report_keywords"] = keywords
+            st.session_state["report_ai"] = recommendations
+            st.session_state["report_steps"] = steps
+
+# ========== 📄 Report ==========
+elif tab == "📄 Report":
+    st.markdown("## 📄 Download Full Maintenance Report")
+
+    if "report_note" in st.session_state:
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        pdf.cell(200, 10, txt="🚚 AI Maintenance Report", ln=True, align="C")
+        pdf.cell(200, 10, txt="", ln=True)
+
+        pdf.cell(200, 10, txt="📝 Mechanic Notes:", ln=True)
+        pdf.multi_cell(0, 10, txt=st.session_state["report_note"])
+
+        pdf.cell(200, 10, txt="🔍 Top Keywords:", ln=True)
+        for word, score in st.session_state["report_keywords"]:
+            pdf.cell(200, 10, txt=f"- {word} (score: {score:.2f})", ln=True)
+
+        pdf.cell(200, 10, txt="🤖 AI Recommendations:", ln=True)
+        for rec in st.session_state["report_ai"]:
+            pdf.cell(200, 10, txt=f"- {rec}", ln=True)
+
+        pdf.cell(200, 10, txt="🛠 Guided Steps:", ln=True)
+        for step in st.session_state["report_steps"]:
+            for line in step.split("\n"):
+                pdf.cell(200, 10, txt=line.strip(), ln=True)
+
+        pdf_output = "final_report.pdf"
+        pdf.output(pdf_output)
+        with open(pdf_output, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+            href = f'<a href="data:application/octet-stream;base64,{b64}" download="{pdf_output}">📥 Download Report PDF</a>'
+            st.markdown(href, unsafe_allow_html=True)
     else:
-        if st.button("📥 Download PDF Report"):
-            pdf = FPDF()
-            pdf.add_page()
-            pdf.set_font("Arial", size=12)
-            pdf.cell(200, 10, "Truck Maintenance Report", ln=True, align="C")
-            pdf.ln(10)
-            pdf.multi_cell(0, 10, "Mechanic Notes:")
-            pdf.multi_cell(0, 10, st.session_state['notes'])
-            pdf.ln(5)
-            pdf.cell(200, 10, "Top Keywords:", ln=True)
-            for word, score in st.session_state['keywords']:
-                pdf.cell(200, 10, f"- {word} ({score:.2f})", ln=True)
-            filename = "truck_maintenance_report.pdf"
-            pdf.output(filename)
-            with open(filename, "rb") as f:
-                st.download_button("Download Report", f, file_name=filename, mime="application/pdf")
+        st.warning("ℹ️ Run the Note Analyzer first to generate a report.")
+
