@@ -1,20 +1,19 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import os
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
-import matplotlib.pyplot as plt
 from fpdf import FPDF
-import os
+import matplotlib.pyplot as plt
 
-# ----- Page Config -----
+# --- Page Setup ---
 st.set_page_config(page_title="Isuzu 4JJ1 AI System", layout="wide")
 
-# ----- User Authentication -----
+# --- User Auth ---
 def load_users():
     if not os.path.exists("users.csv"):
-        df = pd.DataFrame(columns=["username", "password"])
-        df.to_csv("users.csv", index=False)
+        pd.DataFrame(columns=["username", "password"]).to_csv("users.csv", index=False)
     return pd.read_csv("users.csv")
 
 def save_user(username, password):
@@ -45,19 +44,19 @@ if not st.session_state.logged_in:
                 st.success("✅ Login successful!")
                 st.experimental_rerun()
             else:
-                st.error("❌ Invalid username or password")
+                st.error("❌ Invalid credentials")
 
     with register_tab:
         new_user = st.text_input("New Username")
         new_pw = st.text_input("New Password", type="password")
         if st.button("Register"):
             if save_user(new_user, new_pw):
-                st.success("✅ Registration successful!")
+                st.success("✅ Registered!")
             else:
                 st.warning("⚠️ Username already exists")
     st.stop()
 
-# ----- Load Truck Data -----
+# --- Load Data ---
 @st.cache(allow_output_mutation=True)
 def load_data():
     rng = np.random.default_rng(seed=42)
@@ -71,7 +70,7 @@ def load_data():
 
 data = load_data()
 
-# ----- Risk Classification -----
+# --- Risk Classification ---
 def classify(row):
     score = row['Engine_Temp'] + (40 - row['Oil_Pressure']) + (row['RPM'] // 100) + (row['Mileage'] // 10000)
     if score < 200:
@@ -84,7 +83,7 @@ def classify(row):
 data['Failure'] = data.apply(classify, axis=1)
 data['Risk_Level'] = data['Failure'].map({0: 'Low', 1: 'Medium', 2: 'High'})
 
-# ----- Issue Detection -----
+# --- Issue Detection ---
 def detect_issue(row):
     issues = []
     if row['Engine_Temp'] > 100:
@@ -99,18 +98,18 @@ def detect_issue(row):
 
 data['Possible_Issue'] = data.apply(detect_issue, axis=1)
 
-# ----- Model Train -----
+# --- Model Training ---
 model = RandomForestClassifier()
 X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
 y = data['Failure']
 model.fit(X, y)
 
-# ----- Navigation -----
+# --- Navigation ---
 page = st.sidebar.radio("Navigate", ["Dashboard", "Note Analyzer", "Report"])
 
-# ----- Dashboard -----
+# --- Dashboard Page ---
 if page == "Dashboard":
-    st.title("🚛 Truck AI - Health Prediction Dashboard")
+    st.title("🚛 Truck Health Prediction Dashboard")
 
     col1, col2, col3 = st.columns(3)
     col1.metric("Total Trucks", len(data))
@@ -130,10 +129,10 @@ if page == "Dashboard":
     ax2.set_ylabel("Count")
     st.pyplot(fig2)
 
-    st.subheader("📋 Truck Data with Issue Analysis")
+    st.subheader("📋 Truck Data Table")
     st.dataframe(data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage', 'Risk_Level', 'Possible_Issue']])
 
-# ----- Note Analyzer -----
+# --- Mechanic Note Analyzer ---
 elif page == "Note Analyzer":
     st.title("🛠️ Mechanic Note Analyzer")
     text = st.text_area("Paste mechanic notes:")
@@ -146,11 +145,12 @@ elif page == "Note Analyzer":
             keywords = tfidf.get_feature_names_out()
             scores = matrix.toarray()[0]
             top_keywords = sorted(zip(keywords, scores), key=lambda x: x[1], reverse=True)
-            tech_terms = ["engine", "oil", "coolant", "pressure", "knocking", "vibration", "temperature", "leak", "rpm"]
-            matched_terms = [kw for kw, _ in top_keywords if kw.lower() in tech_terms]
 
-            if not matched_terms:
-                st.error("❌ Sorry, mechanic note does not contain relevant technical keywords.")
+            valid_terms = ["engine", "oil", "coolant", "pressure", "knocking", "vibration", "leak", "rpm"]
+            matched = [kw for kw, _ in top_keywords if kw.lower() in valid_terms]
+
+            if not matched:
+                st.error("❌ No relevant technical keywords detected.")
             else:
                 st.write("**Top Keywords:**")
                 for word, score in top_keywords[:5]:
@@ -163,12 +163,12 @@ elif page == "Note Analyzer":
                     elif "engine" in word:
                         recs.append("🚨 Inspect engine block and coolant system.")
                     elif "coolant" in word:
-                        recs.append("💧 Top-up or replace coolant.")
+                        recs.append("💧 Refill or replace coolant.")
                     elif "knocking" in word or "vibration" in word:
-                        recs.append("⚙️ Investigate spark plugs and engine mounts.")
+                        recs.append("⚙️ Check spark plugs and engine mounts.")
+
                 if recs:
-                    st.markdown("---")
-                    st.write("### 🤖 AI Suggestions:")
+                    st.markdown("### 🤖 AI Suggestions")
                     for tip in recs:
                         st.write(tip)
 
@@ -177,9 +177,9 @@ elif page == "Note Analyzer":
                 st.session_state['notes'] = text
                 st.session_state['recs'] = recs
 
-# ----- Report -----
+# --- PDF Report Page ---
 elif page == "Report":
-    st.title("📄 Generate Maintenance Report")
+    st.title("📄 Download Maintenance Report")
     if 'keywords' not in st.session_state:
         st.info("ℹ️ Please run the Note Analyzer first.")
     else:
