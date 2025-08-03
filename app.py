@@ -1,20 +1,21 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import hashlib
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfVectorizer
 import matplotlib.pyplot as plt
 from fpdf import FPDF
-import hashlib
 import os
 
-# ----- Page Config -----
+# ---------- Config ----------
 st.set_page_config(page_title="Isuzu 4JJ1 AI System", layout="wide")
 
-# ----- User Authentication -----
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+# ---------- Password Hashing ----------
+def hash_pw(pw):
+    return hashlib.sha256(pw.encode()).hexdigest()
 
+# ---------- User Auth ----------
 def load_users():
     if not os.path.exists("users.csv"):
         df = pd.DataFrame(columns=["username", "password"])
@@ -25,27 +26,30 @@ def save_user(username, password):
     df = load_users()
     if username in df["username"].values:
         return False
-    hashed_pw = hash_password(password)
-    new_row = pd.DataFrame([{"username": username, "password": hashed_pw}])
+    new_row = pd.DataFrame([{"username": username, "password": hash_pw(password)}])
     df = pd.concat([df, new_row], ignore_index=True)
     df.to_csv("users.csv", index=False)
     return True
 
 def check_login(username, password):
     df = load_users()
-    hashed_pw = hash_password(password)
-    return ((df["username"] == username) & (df["password"] == hashed_pw)).any()
+    hashed = hash_pw(password)
+    return ((df["username"] == username) & (df["password"] == hashed)).any()
 
+# ---------- Session ----------
 if "logged_in" not in st.session_state:
     st.session_state.logged_in = False
+if "user" not in st.session_state:
+    st.session_state.user = ""
 
+# ---------- Login/Register ----------
 if not st.session_state.logged_in:
-    st.title("🔐 Truck AI Login")
+    st.title("🔐 User Login")
     login_tab, register_tab = st.tabs(["🔓 Login", "📝 Register"])
 
     with login_tab:
-        user = st.text_input("Username")
-        pw = st.text_input("Password", type="password")
+        user = st.text_input("Username").strip()
+        pw = st.text_input("Password", type="password").strip()
         if st.button("Login"):
             if check_login(user, pw):
                 st.session_state.logged_in = True
@@ -56,16 +60,19 @@ if not st.session_state.logged_in:
                 st.error("❌ Invalid username or password")
 
     with register_tab:
-        new_user = st.text_input("New Username")
-        new_pw = st.text_input("New Password", type="password")
+        new_user = st.text_input("New Username").strip()
+        new_pw = st.text_input("New Password", type="password").strip()
         if st.button("Register"):
-            if save_user(new_user, new_pw):
-                st.success("✅ Registration successful!")
+            if new_user and new_pw:
+                if save_user(new_user, new_pw):
+                    st.success("✅ Registration successful!")
+                else:
+                    st.warning("⚠ Username already exists")
             else:
-                st.warning("⚠ Username already exists")
+                st.warning("⚠ Please enter both username and password")
     st.stop()
 
-# ----- Load Truck Data -----
+# ---------- Truck Data ----------
 @st.cache_data
 def load_data():
     rng = np.random.default_rng(seed=42)
@@ -79,7 +86,7 @@ def load_data():
 
 data = load_data()
 
-# ----- Risk Classification -----
+# ---------- Risk & Issues ----------
 def classify(row):
     score = row['Engine_Temp'] + (40 - row['Oil_Pressure']) + (row['RPM'] // 100) + (row['Mileage'] // 10000)
     if score < 200:
@@ -89,10 +96,6 @@ def classify(row):
     else:
         return 2
 
-data['Failure'] = data.apply(classify, axis=1)
-data['Risk_Level'] = data['Failure'].map({0: 'Low', 1: 'Medium', 2: 'High'})
-
-# ----- Issue Detection -----
 def detect_issue(row):
     issues = []
     if row['Engine_Temp'] > 100:
@@ -105,18 +108,20 @@ def detect_issue(row):
         issues.append("Aging Components")
     return ", ".join(issues) if issues else "Normal"
 
+data['Failure'] = data.apply(classify, axis=1)
+data['Risk_Level'] = data['Failure'].map({0: 'Low', 1: 'Medium', 2: 'High'})
 data['Possible_Issue'] = data.apply(detect_issue, axis=1)
 
-# ----- Model Train -----
+# ---------- Train Model ----------
 model = RandomForestClassifier()
 X = data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage']]
 y = data['Failure']
 model.fit(X, y)
 
-# ----- Navigation -----
-page = st.sidebar.radio("📂 Navigate", ["Dashboard", "Note Analyzer", "Report"])
+# ---------- Sidebar Nav ----------
+page = st.sidebar.radio("Navigate", ["Dashboard", "Note Analyzer", "Report"])
 
-# ----- Dashboard -----
+# ---------- Dashboard ----------
 if page == "Dashboard":
     st.title("🚛 Truck AI - Health Prediction Dashboard")
 
@@ -141,7 +146,7 @@ if page == "Dashboard":
     st.subheader("📋 Truck Data with Issue Analysis")
     st.dataframe(data[['Engine_Temp', 'Oil_Pressure', 'RPM', 'Mileage', 'Risk_Level', 'Possible_Issue']])
 
-# ----- Note Analyzer -----
+# ---------- Note Analyzer ----------
 elif page == "Note Analyzer":
     st.title("🛠 Mechanic Note Analyzer")
     text = st.text_area("Paste mechanic notes:")
@@ -185,7 +190,7 @@ elif page == "Note Analyzer":
                 st.session_state['notes'] = text
                 st.session_state['recs'] = recs
 
-# ----- Report -----
+# ---------- Report ----------
 elif page == "Report":
     st.title("📄 Generate Maintenance Report")
     if 'keywords' not in st.session_state:
@@ -212,10 +217,3 @@ elif page == "Report":
             pdf.output(filename)
             with open(filename, "rb") as f:
                 st.download_button("Download Report", f, file_name=filename, mime="application/pdf")
-
-# ----- Logout Button -----
-st.sidebar.markdown("---")
-if st.sidebar.button("🚪 Logout"):
-    st.session_state.logged_in = False
-    st.session_state.user = ""
-    st.rerun()
